@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta property="og:title" content="生辰喜乐 · 旋转蛋糕">
+<meta property="og:description" content="点开看看，有人给你做了一个会旋转的生日蛋糕 🎂">
+<meta property="og:type" content="website">
+<title>生辰喜乐 · 旋转蛋糕</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;
+    -webkit-tap-highlight-color:transparent;user-select:none;cursor:pointer;
+    font-family:"PingFang SC","Microsoft YaHei",sans-serif;}
+  canvas{display:block;}
+
+  .fab{
+    border-radius:22px;border:1px solid rgba(255,255,255,0.22);
+    background:rgba(30,34,64,0.55);color:#fff;
+    height:44px;min-width:44px;padding:0 14px;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;z-index:10;
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    font-size:16px;gap:4px;transition:all .2s;
+  }
+  .fab:hover{background:rgba(50,58,110,0.72);}
+  .fab:active{transform:scale(0.94);}
+
+  .corner{position:fixed;display:flex;gap:8px;z-index:10;}
+  .corner.tr{top:14px;right:14px;}
+  .corner.br{bottom:14px;right:14px;}
+  .corner.bl{bottom:14px;left:14px;}
+
+  #langBtn{min-width:52px;font-size:14px;font-weight:700;}
+  #soundBtn{font-size:18px;width:44px;padding:0;}
+  #soundBtn.off{opacity:0.4;}
+  #musicBtn.playing{
+    border-color:rgba(255,140,190,0.85);
+    box-shadow:0 0 14px rgba(255,140,190,0.45);
+  }
+  #wishBtn{
+    padding:0 18px;font-weight:700;
+    background:rgba(255,120,180,0.28);
+    border-color:rgba(255,150,200,0.5);
+  }
+  #wishBtn:hover{background:rgba(255,120,180,0.42);}
+
+  .modal{
+    position:fixed;inset:0;background:rgba(0,0,0,0.65);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    z-index:20;display:none;
+    align-items:center;justify-content:center;padding:20px;
+  }
+  .modal.show{display:flex;animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+  .modal-box{
+    background:linear-gradient(160deg,#1e2452,#141830);
+    border:1px solid rgba(255,180,220,0.22);
+    border-radius:18px;padding:22px;
+    width:100%;max-width:380px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+    cursor:default;
+    animation:popIn .28s cubic-bezier(.2,.9,.3,1.3);
+  }
+  @keyframes popIn{
+    from{transform:scale(0.92);opacity:0}
+    to{transform:scale(1);opacity:1}
+  }
+  .modal-box h3{
+    margin:0 0 14px;font-size:17px;color:#fff;
+    font-weight:700;text-align:center;
+  }
+  .modal-box textarea{
+    width:100%;min-height:90px;resize:none;
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.15);
+    border-radius:10px;padding:12px;color:#fff;
+    font-size:14px;font-family:inherit;outline:none;
+    line-height:1.55;letter-spacing:0.3px;
+  }
+  .modal-box textarea:focus{
+    border-color:rgba(255,150,200,0.55);
+    box-shadow:0 0 0 3px rgba(255,150,200,0.12);
+  }
+  .modal-actions{display:flex;gap:10px;margin-top:14px;}
+  .modal-actions button{
+    flex:1;height:42px;border-radius:10px;
+    border:1px solid rgba(255,255,255,0.18);
+    background:rgba(255,255,255,0.06);
+    color:#fff;font-size:14px;cursor:pointer;
+    font-family:inherit;transition:all .18s;
+  }
+  .modal-actions button:active{transform:scale(0.97);}
+  .modal-actions button.primary{
+    background:linear-gradient(135deg,#ff7eb6,#ff5a9c);
+    border:none;font-weight:700;
+  }
+  .modal-actions button.primary:hover{filter:brightness(1.1);}
+
+  .toast{
+    position:fixed;top:50%;left:50%;
+    transform:translate(-50%,-50%) scale(0.85);
+    background:rgba(30,34,60,0.94);color:#fff;
+    padding:14px 26px;border-radius:30px;
+    border:1px solid rgba(255,150,200,0.35);
+    font-size:15px;z-index:30;
+    opacity:0;pointer-events:none;
+    transition:all .28s cubic-bezier(.2,.9,.3,1.3);
+    box-shadow:0 10px 40px rgba(0,0,0,0.4);
+    white-space:nowrap;
+  }
+  .toast.show{
+    opacity:1;transform:translate(-50%,-50%) scale(1);
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="corner tr">
+  <button class="fab" id="langBtn">EN</button>
+  <button class="fab" id="soundBtn">♪</button>
+</div>
+<div class="corner bl">
+  <button class="fab" id="wishBtn">✨ 许愿</button>
+</div>
+<div class="corner br">
+  <button class="fab" id="musicBtn" title="上传背景音乐">🎵</button>
+  <button class="fab" id="shotBtn" title="保存图片">📷</button>
+</div>
+
+<div class="modal" id="wishModal">
+  <div class="modal-box">
+    <h3 id="wishTitle">写下你的生日愿望</h3>
+    <textarea id="wishInput" maxlength="60"></textarea>
+    <div class="modal-actions">
+      <button id="wishCancel">取消</button>
+      <button id="wishConfirm" class="primary">许愿</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="musicFile" accept="audio/*" hidden>
+
+<script>
+(function(){
+'use strict';
+
+/* ================= URL 参数 ================= */
+const params = new URLSearchParams(location.search);
+const NAME   = (params.get('name') || '').trim().slice(0, 12);
+let   wishText = (params.get('wish') || '').trim().slice(0, 60);
+let   wishAlpha = 0;
+
+/* ================= i18n ================= */
+const I18N = {
+  zh: {
+    langBtn: 'EN',
+    title: n => n ? n + '，生辰喜乐' : '生辰喜乐',
+    sub: 'H A P P Y   B I R T H D A Y',
+    hint: '点击屏幕 · 吹蜡烛 / 重新点燃',
+    wishBtn: '✨ 许愿',
+    wishTitle: '写下你的生日愿望',
+    wishPlaceholder: '写下来，吹蜡烛时就会实现…',
+    wishCancel: '取消',
+    wishConfirm: '许愿',
+    defaultWish: '愿你年年岁岁，长安长乐',
+    toastSaved: '已保存图片 📷',
+    toastMusic: '♪ 背景音乐已加载',
+    toastWish: '愿望已许下 ✨',
+    toastMusicErr: '音乐播放失败'
+  },
+  en: {
+    langBtn: '中',
+    title: n => n ? 'Happy Birthday, ' + n : 'Happy Birthday',
+    sub: 'M A K E   A   W I S H',
+    hint: 'Click · blow / relight candles',
+    wishBtn: '✨ Wish',
+    wishTitle: 'Make a Birthday Wish',
+    wishPlaceholder: 'Write it down, blow the candles…',
+    wishCancel: 'Cancel',
+    wishConfirm: 'Wish',
+    defaultWish: 'May all your wishes come true',
+    toastSaved: 'Saved 📷',
+    toastMusic: '♪ Background music loaded',
+    toastWish: 'Wish made ✨',
+    toastMusicErr: 'Failed to play'
+  }
+};
+let lang = localStorage.getItem('cake_lang') || 'zh';
+if (lang !== 'zh' && lang !== 'en') lang = 'zh';
+const T = () => I18N[lang];
+
+/* ================= DOM ================= */
+const canvas    = document.getElementById('scene');
+const ctx       = canvas.getContext('2d');
+const soundBtn  = document.getElementById('soundBtn');
+const langBtn   = document.getElementById('langBtn');
+const wishBtn   = document.getElementById('wishBtn');
+const shotBtn   = document.getElementById('shotBtn');
+const musicBtn  = document.getElementById('musicBtn');
+const musicFile = document.getElementById('musicFile');
+const wishModal = document.getElementById('wishModal');
+const wishInput = document.getElementById('wishInput');
+const wishTitle = document.getElementById('wishTitle');
+const wishCancel  = document.getElementById('wishCancel');
+const wishConfirm = document.getElementById('wishConfirm');
+const toastEl   = document.getElementById('toast');
+
+/* ================= Canvas ================= */
+let W=0,H=0,DPR=1,S=1,baseX=0,baseY=0;
+let isMobile = false;
+const bgCanvas = document.createElement('canvas');
+const bgCtx    = bgCanvas.getContext('2d');
+
+function resize(){
+  DPR = Math.min(2, window.devicePixelRatio||1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width  = Math.floor(W*DPR);
+  canvas.height = Math.floor(H*DPR);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  isMobile = W < 700 || /Mobi|Android/i.test(navigator.userAgent);
+  S = Math.min(W*0.80/260, H*0.30/180);
+  baseX = W/2;
+  baseY = H*0.78;
+
+  bgCanvas.width  = Math.floor(W*DPR);
+  bgCanvas.height = Math.floor(H*DPR);
+  bgCtx.setTransform(DPR,0,0,DPR,0,0);
+  renderBgStatic();
+}
+window.addEventListener('resize', resize);
+
+/* ================= 状态 ================= */
+let time=0, angle=0;
+let candleLight=1, targetLight=1;
+let mouseX=0,mouseY=0, parX=0,parY=0;
+let nextBoom=2.5;
+const COS_P=Math.cos(0.40), SIN_P=Math.sin(0.40);
+
+function project(x,y,z){
+  const ca=Math.cos(angle), sa=Math.sin(angle);
+  const rx=x*ca - z*sa, rz=x*sa + z*ca;
+  return { x:baseX+rx*S, y:baseY-(y*COS_P - rz*SIN_P)*S, z:rz };
+}
+
+/* ================= 星空 ================= */
+const STAR_N = isMobile ? 90 : 170;
+const stars = [];
+for(let i=0;i<STAR_N;i++){
+  stars.push({
+    x:Math.random(), y:Math.random(),
+    r:0.3+Math.random()*1.4,
+    ph:Math.random()*Math.PI*2,
+    sp:0.8+Math.random()*2.2
+  });
+}
+
+function renderBgStatic(){
+  const g = bgCtx.createRadialGradient(
+    W*0.5,H*0.44,0, W*0.5,H*0.44, Math.max(W,H)*0.82
+  );
+  g.addColorStop(0,   '#1b2149');
+  g.addColorStop(0.45,'#0e1230');
+  g.addColorStop(1,   '#04050c');
+  bgCtx.fillStyle = g;
+  bgCtx.fillRect(0,0,W,H);
+}
+
+function drawBackground(){
+  ctx.drawImage(bgCanvas, 0, 0, W, H);
+  for(let i=0;i<stars.length;i++){
+    const s = stars[i];
+    const a = 0.15 + 0.85*Math.pow(Math.sin(time*s.sp+s.ph)*0.5+0.5, 2.2);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ================= 粒子 ================= */
+const sparks=[], fireworks=[], smoke=[];
+const SPARK_MAX = isMobile ? 40 : 80;
+
+function spawnSpark(){
+  if(sparks.length>SPARK_MAX) return;
+  sparks.push({
+    x: baseX+(Math.random()-0.5)*Math.min(420,W*0.7),
+    y: baseY-40,
+    vx:(Math.random()-0.5)*0.7,
+    vy:-(0.5+Math.random()*1.3),
+    r:0.8+Math.random()*2.2,
+    life:0, maxLife:3+Math.random()*3,
+    hue:28+Math.random()*34
+  });
+}
+function boom(x,y){
+  const hue = Math.random()*360;
+  const n = isMobile ? 36 : 70;
+  for(let i=0;i<n;i++){
+    const a = (i/n)*Math.PI*2 + Math.random()*0.35;
+    const sp = 1.6 + Math.random()*3.8;
+    fireworks.push({
+      x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      r:1+Math.random()*2, life:0,
+      maxLife:1+Math.random()*1.1,
+      hue:hue+Math.random()*40
+    });
+  }
+}
+function spawnSmoke(x,y){
+  if(smoke.length>60) return;
+  smoke.push({
+    x:x+(Math.random()-0.5)*6, y,
+    vx:(Math.random()-0.5)*0.7,
+    vy:-0.5-Math.random()*0.9,
+    r:2+Math.random()*3.5,
+    life:0, maxLife:1.6+Math.random()*1.3
+  });
+}
+
+/* ================= 蛋糕定义 ================= */
+const LAYERS=[
+  {y0:0,  y1:72,  r:130, dark:[118,56,32], light:[248,190,142], top:'#ffe6c8'},
+  {y0:72, y1:132, r:100, dark:[138,68,38], light:[255,208,164], top:'#fff2dd'},
+  {y0:132,y1:182, r:72,  dark:[156,82,46], light:[255,224,188], top:'#fffaf0'}
+];
+
+/* ================= 地面 ================= */
+function drawGround(){
+  const c = project(0,0,0);
+  ctx.save();
+  ctx.translate(c.x, c.y+6*S);
+  ctx.scale(1, SIN_P*0.95);
+  const sg = ctx.createRadialGradient(0,0,0,0,0,150*S);
+  sg.addColorStop(0,  'rgba(0,0,0,0.55)');
+  sg.addColorStop(0.6,'rgba(0,0,0,0.20)');
+  sg.addColorStop(1,  'rgba(0,0,0,0)');
+  ctx.fillStyle=sg;
+  ctx.beginPath(); ctx.arc(0,0,150*S,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 152*S, 152*S*SIN_P, 0, 0, Math.PI*2);
+  ctx.fillStyle='rgba(200,215,255,0.08)';
+  ctx.fill();
+  ctx.strokeStyle='rgba(205,222,255,0.35)';
+  ctx.lineWidth=1.4; ctx.stroke();
+}
+
+/* ================= 圆柱侧面 ================= */
+function drawSide(L){
+  const N = isMobile ? 40 : 56;
+  for(let i=0;i<N;i++){
+    const a0=i/N*Math.PI*2, a1=(i+1)/N*Math.PI*2;
+    const phi=(a0+a1)/2+angle, sn=Math.sin(phi);
+    if(sn<=0.001) continue;
+    const p0=project(L.r*Math.cos(a0),L.y0,L.r*Math.sin(a0));
+    const p1=project(L.r*Math.cos(a1),L.y0,L.r*Math.sin(a1));
+    const p2=project(L.r*Math.cos(a1),L.y1,L.r*Math.sin(a1));
+    const p3=project(L.r*Math.cos(a0),L.y1,L.r*Math.sin(a0));
+    const cn=Math.cos(phi);
+    let diff=(-0.52*cn+0.78*sn)/0.94;
+    if(diff<0) diff=0;
+    const t=0.16+0.84*diff;
+    const r=Math.round(L.dark[0]+(L.light[0]-L.dark[0])*t);
+    const g=Math.round(L.dark[1]+(L.light[1]-L.dark[1])*t);
+    const b=Math.round(L.dark[2]+(L.light[2]-L.dark[2])*t);
+    ctx.beginPath();
+    ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y);
+    ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y);
+    ctx.closePath();
+    const col=`rgb(${r},${g},${b})`;
+    ctx.fillStyle=col; ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=1; ctx.stroke();
+  }
+}
+
+/* ================= 顶面 ================= */
+function drawTop(L){
+  const N = isMobile ? 40 : 56;
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const a=i/N*Math.PI*2;
+    const p=project(L.r*Math.cos(a), L.y1, L.r*Math.sin(a));
+    i? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y);
+  }
+  ctx.closePath();
+  const c=project(0,L.y1,0), rad=L.r*S;
+  const g=ctx.createRadialGradient(
+    c.x-rad*0.32,c.y-rad*0.16,rad*0.05,
+    c.x,c.y,rad*1.05
+  );
+  g.addColorStop(0,'#ffffff');
+  g.addColorStop(0.45,L.top);
+  g.addColorStop(1,'rgba(255,232,205,0.92)');
+  ctx.fillStyle=g; ctx.fill();
+}
+
+/* ================= 奶油珍珠边 ================= */
+function drawPearls(L){
+  const count = Math.max(10, Math.round(L.r/9));
+  const items = [];
+  for(let i=0;i<count;i++){
+    const a = i/count*Math.PI*2;
+    const p = project(L.r*0.98*Math.cos(a), L.y0+2, L.r*0.98*Math.sin(a));
+    items.push({p, phi:a+angle});
+  }
+  items.sort((A,B)=>A.p.z-B.p.z);
+  const rad = Math.max(2, L.r*0.028)*S;
+  for(const it of items){
+    const sn = Math.sin(it.phi);
+    if(sn<0) continue;
+    const bright = 0.5 + 0.5*Math.max(0,sn);
+    ctx.beginPath();
+    ctx.arc(it.p.x, it.p.y, rad, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,245,225,${0.5+0.5*bright})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(it.p.x-rad*0.3, it.p.y-rad*0.3, rad*0.4, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.4+0.6*bright})`;
+    ctx.fill();
+  }
+}
+
+/* ================= 顶面奶油球 ================= */
+function drawDecor(L){
+  const count = Math.max(10, Math.round(L.r/7.5));
+  const items = [];
+  for(let i=0;i<count;i++){
+    const a = i/count*Math.PI*2;
+    const p = project(L.r*0.86*Math.cos(a), L.y1+4, L.r*0.86*Math.sin(a));
+    items.push({p, phi:a+angle});
+  }
+  items.sort((A,B)=>A.p.z-B.p.z);
+  const rad = Math.max(2.4, L.r*0.036)*S;
+  for(const it of items){
+    const sn = Math.sin(it.phi);
+    const bright = 0.5 + 0.5*Math.max(0,sn);
+    ctx.beginPath();
+    ctx.arc(it.p.x, it.p.y, rad, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${Math.round(235*bright+20)},${Math.round(90*bright+30)},${Math.round(120*bright+40)},${0.55+0.45*bright})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(it.p.x-rad*0.32, it.p.y-rad*0.32, rad*0.42, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.35+0.55*bright})`;
+    ctx.fill();
+  }
+}
+
+/* ================= 火焰 ================= */
+function drawFlame(fx,fy){
+  const L=candleLight;
+  if(L<=0.015) return;
+  const flick = 1 + 0.16*Math.sin(time*21) + 0.09*Math.sin(time*13.7+1.1);
+  const fh = 22*S*L*flick, fw = 10*S*L*flick;
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+
+  const glowR = 150*S*L*flick;
+  const gg = ctx.createRadialGradient(fx,fy-fh*0.4,0,fx,fy-fh*0.4,glowR);
+  gg.addColorStop(0,    `rgba(255,196,100,${0.30*L})`);
+  gg.addColorStop(0.35, `rgba(255,140,60,${0.12*L})`);
+  gg.addColorStop(1,    'rgba(255,110,30,0)');
+  ctx.fillStyle=gg;
+  ctx.beginPath(); ctx.arc(fx,fy-fh*0.4,glowR,0,Math.PI*2); ctx.fill();
+
+  const fg = ctx.createRadialGradient(fx,fy-fh*0.5,0,fx,fy-fh*0.5,fh);
+  fg.addColorStop(0,    'rgba(255,255,225,0.98)');
+  fg.addColorStop(0.35, 'rgba(255,200,80,0.90)');
+  fg.addColorStop(0.72, 'rgba(255,120,30,0.55)');
+  fg.addColorStop(1,    'rgba(255,70,0,0)');
+  ctx.fillStyle=fg;
+  ctx.beginPath();
+  ctx.ellipse(fx,fy-fh*0.5,fw*0.55,fh*0.78,0,0,Math.PI*2);
+  ctx.fill();
+
+  const ig = ctx.createRadialGradient(fx,fy-fh*0.42,0,fx,fy-fh*0.42,fh*0.42);
+  ig.addColorStop(0,'rgba(255,255,255,1)');
+  ig.addColorStop(1,'rgba(255,245,190,0)');
+  ctx.fillStyle=ig;
+  ctx.beginPath();
+  ctx.ellipse(fx,fy-fh*0.42,fw*0.28,fh*0.40,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/* ================= 蜡烛 ================= */
+function drawCandle(){
+  const pB=project(0,182,0), pT=project(0,224,0);
+  const cw=Math.max(6,9*S), hgt=pB.y-pT.y;
+  if(hgt<=0) return;
+  const left=pB.x-cw/2, right=pB.x+cw/2;
+
+  const g=ctx.createLinearGradient(left,0,right,0);
+  g.addColorStop(0,'#ddcbb4');
+  g.addColorStop(0.32,'#fffdf6');
+  g.addColorStop(0.68,'#fff7e9');
+  g.addColorStop(1,'#d4c2aa');
+  ctx.fillStyle=g;
+  ctx.fillRect(left,pT.y,cw,hgt);
+
+  ctx.strokeStyle='rgba(240,78,110,0.92)';
+  ctx.lineWidth=Math.max(1.4,2.1*S);
+  for(let i=0;i<4;i++){
+    const y=pT.y+hgt*(0.14+i*0.22);
+    ctx.beginPath();
+    ctx.moveTo(left,y);
+    ctx.lineTo(right,y+hgt*0.055);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle='#3a2a1a'; ctx.lineWidth=1.6;
+  ctx.beginPath();
+  ctx.moveTo(pB.x,pT.y);
+  ctx.lineTo(pB.x,pT.y-5*S);
+  ctx.stroke();
+
+  drawFlame(pB.x, pT.y-5*S);
+}
+
+/* ================= 蛋糕整体 ================= */
+function drawCake(){
+  drawGround();
+  for(const L of LAYERS){
+    drawSide(L);
+    drawTop(L);
+    drawPearls(L);
+    drawDecor(L);
+  }
+  drawCandle();
+}
+
+/* ================= 粒子 ================= */
+function updateParticles(){
+  if(sparks.length<SPARK_MAX && Math.random()<0.35) spawnSpark();
+  for(let i=sparks.length-1;i>=0;i--){
+    const s=sparks[i];
+    s.life+=0.016; s.x+=s.vx; s.y+=s.vy; s.vy-=0.004;
+    if(s.life>s.maxLife) sparks.splice(i,1);
+  }
+  for(let i=fireworks.length-1;i>=0;i--){
+    const f=fireworks[i];
+    f.life+=0.016; f.x+=f.vx; f.y+=f.vy;
+    f.vy+=0.055; f.vx*=0.986; f.vy*=0.986;
+    if(f.life>f.maxLife) fireworks.splice(i,1);
+  }
+  for(let i=smoke.length-1;i>=0;i--){
+    const s=smoke[i];
+    s.life+=0.016; s.x+=s.vx; s.y+=s.vy;
+    s.vy*=0.99; s.r+=0.08;
+    if(s.life>s.maxLife) smoke.splice(i,1);
+  }
+  nextBoom -= 0.016;
+  if(nextBoom<=0){
+    boom(W*(0.15+Math.random()*0.7), H*(0.10+Math.random()*0.30));
+    nextBoom = 3 + Math.random()*3.5;
+  }
+}
+function drawParticles(){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  for(const s of sparks){
+    const t=s.life/s.maxLife, a=Math.sin(Math.PI*t)*0.9;
+    ctx.fillStyle=`hsla(${s.hue},100%,72%,${a})`;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r*(0.6+0.4*Math.sin(t*6)),0,Math.PI*2);
+    ctx.fill();
+  }
+  for(const f of fireworks){
+    const t=f.life/f.maxLife, a=Math.pow(1-t,2);
+    ctx.fillStyle=`hsla(${f.hue},100%,66%,${a})`;
+    ctx.beginPath();
+    ctx.arc(f.x,f.y,f.r*(1-t*0.6),0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+  for(const s of smoke){
+    const t=s.life/s.maxLife;
+    ctx.fillStyle=`rgba(190,195,210,${0.28*(1-t)})`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+  }
+}
+
+/* ================= 标题 ================= */
+function drawTitle(){
+  const text = T().title(NAME);
+  let size = Math.min(W*0.11, 68);
+  ctx.save();
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+
+  ctx.font=`900 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  const maxW = W*0.88;
+  const measured = ctx.measureText(text).width;
+  if(measured > maxW){
+    size = size * maxW / measured;
+    ctx.font=`900 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  }
+
+  const y = H*0.15 + Math.sin(time*1.3)*5;
+  ctx.shadowColor='rgba(255,160,210,0.85)';
+  ctx.shadowBlur=42;
+  const g=ctx.createLinearGradient(0,y-size*0.62,0,y+size*0.62);
+  g.addColorStop(0,'#fffbe8');
+  g.addColorStop(0.45,'#ffe0f0');
+  g.addColorStop(1,'#c9b4ff');
+  ctx.fillStyle=g;
+  ctx.fillText(text, W/2, y);
+
+  ctx.shadowBlur=18;
+  ctx.font=`${Math.max(11,size*0.20)}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  ctx.fillStyle='rgba(255,255,255,0.72)';
+  ctx.fillText(T().sub, W/2, y+size*0.95);
+
+  ctx.shadowBlur=0;
+  ctx.font=`${Math.max(8,W*0.015)}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  ctx.fillStyle='rgba(255,255,255,0.28)';
+  ctx.fillText(T().hint, W/2, H-70);
+
+  ctx.restore();
+}
+
+/* ================= 愿望上屏 ================= */
+function drawWish(){
+  if(!wishText) return;
+  if(wishAlpha < 1){
+    wishAlpha += 0.028;
+    if(wishAlpha > 1) wishAlpha = 1;
+  }
+  const ease = 1 - Math.pow(1-wishAlpha, 3);
+
+  let size = Math.min(W*0.055, 30);
+  ctx.save();
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+
+  const wrapped = lang === 'en'
+    ? '“' + wishText + '”'
+    : '「 ' + wishText + ' 」';
+
+  ctx.font = `700 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  const maxW = W*0.82;
+  const tw = ctx.measureText(wrapped).width;
+  if(tw > maxW){
+    size = size * maxW / tw;
+    ctx.font = `700 ${size}px "PingFang SC","Microsoft YaHei",sans-serif`;
+  }
+
+  const y = H*0.30 + Math.sin(time*1.6)*3;
+  const scale = 0.92 + 0.08*ease;
+  ctx.globalAlpha = ease;
+  ctx.translate(W/2, y);
+  ctx.scale(scale, scale);
+  ctx.translate(-W/2, -y);
+
+  ctx.shadowColor = 'rgba(255,180,230,0.95)';
+  ctx.shadowBlur = 26;
+  const grad = ctx.createLinearGradient(W/2-140, y-20, W/2+140, y+20);
+  grad.addColorStop(0,   '#fff3d4');
+  grad.addColorStop(0.5, '#ffffff');
+  grad.addColorStop(1,   '#ffd4ea');
+  ctx.fillStyle = grad;
+
+  ctx.fillText(wrapped, W/2, y);
+  ctx.restore();
+}
+
+/* ================= 音频 ================= */
+let actx=null, soundOn=true;
+let bgAudio=null;
+let songPlayed=false;
+
+function getAudio(){
+  if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+  if(actx.state==='suspended') actx.resume();
+  return actx;
+}
+function playNote(freq,dur,delay,vol){
+  if(!soundOn) return;
+  const ac=getAudio();
+  const osc=ac.createOscillator(), gain=ac.createGain();
+  osc.type='sine'; osc.frequency.value=freq;
+  const t0=ac.currentTime+delay;
+  gain.gain.setValueAtTime(0,t0);
+  gain.gain.linearRampToValueAtTime(vol,t0+0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001,t0+dur);
+  osc.connect(gain).connect(ac.destination);
+  osc.start(t0); osc.stop(t0+dur+0.05);
+}
+function playBirthdaySong(){
+  if(songPlayed || !soundOn || bgAudio) return;
+  songPlayed = true;
+  const N={C:523.25,D:587.33,E:659.25,F:698.46,G:783.99,A:880.00,Bb:932.33};
+  const notes=[
+    [N.G,0.35,0],[N.G,0.15,0.4],[N.A,0.5,0.6],
+    [N.G,0.5,1.2],[N.C,0.5,1.8],[N.Bb,0.9,2.4],
+    [N.G,0.35,3.4],[N.G,0.15,3.8],[N.A,0.5,4.0],
+    [N.G,0.5,4.6],[N.D,0.5,5.2],[N.C,0.9,5.8]
+  ];
+  for(const[n,d,t] of notes) playNote(n,d,t,0.13);
+}
+function playBlow(){
+  if(!soundOn) return;
+  const ac=getAudio();
+  const dur=0.45;
+  const buf=ac.createBuffer(1, ac.sampleRate*dur, ac.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<data.length;i++){
+    const t=i/data.length;
+    data[i]=(Math.random()*2-1)*Math.pow(1-t,3)*0.35;
+  }
+  const src=ac.createBufferSource();
+  src.buffer=buf;
+  const gain=ac.createGain(); gain.gain.value=0.5;
+  const filter=ac.createBiquadFilter();
+  filter.type='lowpass'; filter.frequency.value=1200;
+  src.connect(filter).connect(gain).connect(ac.destination);
+  src.start();
+}
+
+/* ================= Toast ================= */
+let toastTimer=0;
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 1600);
+}
+
+/* ================= i18n 应用 ================= */
+function applyLang(){
+  localStorage.setItem('cake_lang', lang);
+  langBtn.textContent = T().langBtn;
+  wishBtn.textContent = T().wishBtn;
+  wishTitle.textContent = T().wishTitle;
+  wishInput.placeholder = T().wishPlaceholder;
+  wishCancel.textContent  = T().wishCancel;
+  wishConfirm.textContent = T().wishConfirm;
+  document.documentElement.lang = lang;
+}
+applyLang();
+
+langBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  lang = (lang === 'zh') ? 'en' : 'zh';
+  applyLang();
+});
+
+/* ================= 许愿 ================= */
+wishBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  wishInput.value = wishText;
+  wishModal.classList.add('show');
+  setTimeout(()=>wishInput.focus(), 120);
+});
+function closeModal(){ wishModal.classList.remove('show'); }
+wishCancel.addEventListener('click', e=>{ e.stopPropagation(); closeModal(); });
+wishModal.addEventListener('click', e=>{
+  if(e.target === wishModal) closeModal();
+});
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape') closeModal();
+  if(e.key === 'Enter' && wishModal.classList.contains('show')){
+    wishConfirm.click();
+  }
+});
+wishConfirm.addEventListener('click', e=>{
+  e.stopPropagation();
+  const v = wishInput.value.trim().slice(0,60);
+  wishText  = v || T().defaultWish;
+  wishAlpha = 0;
+  closeModal();
+  showToast(T().toastWish);
+  boom(W/2, H*0.30);
+});
+
+/* ================= 保存图片 ================= */
+shotBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  try {
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (lang==='en' ? 'birthday-' : '生辰喜乐-') + Date.now() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast(T().toastSaved);
+  } catch(err){
+    console.error(err);
+  }
+});
+
+/* ================= 上传背景音乐 ================= */
+musicBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  getAudio();
+  musicFile.click();
+});
+musicFile.addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(bgAudio){
+    try{ bgAudio.pause(); URL.revokeObjectURL(bgAudio.src); }catch(_){}
+    bgAudio = null;
+  }
+  bgAudio = new Audio(URL.createObjectURL(file));
+  bgAudio.loop = true;
+  bgAudio.volume = 0.7;
+  bgAudio.play().then(()=>{
+    showToast(T().toastMusic);
+    musicBtn.classList.add('playing');
+    if(!soundOn) bgAudio.pause();
+  }).catch(err=>{
+    console.error(err);
+    showToast(T().toastMusicErr);
+  });
+});
+
+/* ================= 音效开关 ================= */
+soundBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  soundOn = !soundOn;
+  soundBtn.classList.toggle('off', !soundOn);
+  if(bgAudio){
+    if(soundOn) bgAudio.play().catch(()=>{});
+    else bgAudio.pause();
+  }
+  if(soundOn && !songPlayed && !bgAudio){
+    getAudio();
+    playBirthdaySong();
+  }
+});
+
+/* ================= 指针 ================= */
+window.addEventListener('pointermove', e=>{
+  mouseX = (e.clientX/W - 0.5) * 2;
+  mouseY = (e.clientY/H - 0.5) * 2;
+});
+
+canvas.addEventListener('pointerdown', e=>{
+  getAudio();
+  if(bgAudio){
+    if(soundOn) bgAudio.play().catch(()=>{});
+  } else {
+    playBirthdaySong();
+  }
+  const mx = e.clientX, my = e.clientY;
+  if(targetLight > 0.5){
+    targetLight = 0;
+    playBlow();
+  } else {
+    targetLight = 1;
+  }
+  boom(mx, my);
+});
+
+/* ================= 主循环 ================= */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  time  += dt;
+  angle += 0.011 * (dt/0.016);
+
+  candleLight += (targetLight - candleLight) * 0.055;
+  if(targetLight<0.5 && candleLight>0.05 && Math.random()<0.5){
+    const p = project(0,229,0);
+    spawnSmoke(p.x, p.y-8*S);
+  }
+
+  parX += (mouseX*16 - parX) * 0.05;
+  parY += (mouseY*10 - parY) * 0.05;
+  baseX = W/2 + parX;
+  baseY = H*0.78 + parY;
+
+  drawBackground();
+  drawCake();
+  updateParticles();
+  drawParticles();
+  drawTitle();
+  drawWish();
+  requestAnimationFrame(frame);
+}
+
+resize();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
